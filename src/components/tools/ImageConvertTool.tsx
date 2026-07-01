@@ -74,8 +74,21 @@ export default function ImageConvertTool({
     setError(null);
     setConvertedBlobUrl(null);
 
-    const isHeic = /\.(heic|heif)$/i.test(selectedFile.name) || selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif';
-    const isImage = isHeic || selectedFile.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(selectedFile.name);
+    const fileNameClean = selectedFile.name.trim().toLowerCase();
+    const fileTypeClean = selectedFile.type.trim().toLowerCase();
+
+    const isHeic = fileNameClean.endsWith('.heic') || 
+                   fileNameClean.endsWith('.heif') || 
+                   fileNameClean.endsWith('.heics') || 
+                   fileNameClean.endsWith('.heifs') || 
+                   fileTypeClean === 'image/heic' || 
+                   fileTypeClean === 'image/heif' ||
+                   fileTypeClean.includes('heic') ||
+                   fileTypeClean.includes('heif');
+
+    const isImage = isHeic || 
+                    fileTypeClean.startsWith('image/') || 
+                    /\.(png|jpe?g|webp|gif|bmp|tiff?)$/i.test(fileNameClean);
     
     if (!isImage) {
       setError('Invalid file type. Please select an image file.');

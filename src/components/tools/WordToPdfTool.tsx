@@ -11,6 +11,39 @@ interface WordToPdfToolProps {
   onOpenAuth: () => void;
 }
 
+// Robust text sanitizer to convert curly quotes, special symbols, dashes, and accented diacritics
+// into safe, WinAnsi-compatible ASCII characters so that pdf-lib never throws encoding errors.
+const sanitizeForPdf = (text: string): string => {
+  if (!text) return '';
+  
+  let result = text
+    .replace(/[\u201c\u201d\u201f\u2033\u2036]/g, '"') // curly double quotes
+    .replace(/[\u2018\u2019\u201b\u2032\u2035`]/g, "'") // curly single quotes
+    .replace(/[\u2013\u2014\u2015]/g, '-')            // em/en dashes
+    .replace(/\u2022/g, '*')                         // bullet point
+    .replace(/\u2026/g, '...')                       // ellipsis
+    .replace(/\u00a0/g, ' ')                         // non-breaking space
+    .replace(/\r\n/g, '\n')                          // standard line breaks
+    .replace(/\r/g, '\n');
+
+  // Decompose accented characters (e.g. é -> e + accent) and remove the accents, mapping to base Latin
+  result = result.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // Keep only standard printable ASCII characters (32 to 126), newline (10), and tab (9)
+  const sanitizedChars: string[] = [];
+  for (let i = 0; i < result.length; i++) {
+    const char = result[i];
+    const code = char.charCodeAt(0);
+    if ((code >= 32 && code <= 126) || code === 10 || code === 9) {
+      sanitizedChars.push(char);
+    } else {
+      sanitizedChars.push(' ');
+    }
+  }
+
+  return sanitizedChars.join('');
+};
+
 export default function WordToPdfTool({
   user,
   onUsageRecorded,
@@ -132,7 +165,8 @@ export default function WordToPdfTool({
       };
 
       // 4. Split source text by newline and wrap lines
-      const sourceLines = inputText.split('\n');
+      const sanitizedText = sanitizeForPdf(inputText);
+      const sourceLines = sanitizedText.split('\n');
       const wrappedLines: string[] = [];
       for (const rawLine of sourceLines) {
         if (rawLine.trim() === '') {
