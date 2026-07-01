@@ -11,6 +11,65 @@ interface PdfToImageToolProps {
   onOpenAuth: () => void;
 }
 
+// Helper to dynamically load PDF.js from CDN and render pages to canvases client-side
+const convertPdfToImages = async (
+  file: File,
+  targetFormat: 'png' | 'jpeg',
+  resolution: '150' | '300'
+): Promise<{ pageNum: number; dataUrl: string }[]> => {
+  const pdfjsLib = await new Promise<any>((resolve, reject) => {
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      (window as any).pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve((window as any).pdfjsLib);
+    };
+    script.onerror = () => reject(new Error('Failed to load PDF rendering library from CDN. Please check your network connection.'));
+    document.head.appendChild(script);
+  });
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const results: { pageNum: number; dataUrl: string }[] = [];
+
+  // 150 DPI corresponds roughly to scale 1.5, 300 DPI is scale 3.0
+  const scale = resolution === '300' ? 3.0 : 1.5;
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      throw new Error('Failed to initialize canvas context');
+    }
+
+    const renderContext = {
+      canvasContext: ctx,
+      viewport: viewport,
+    };
+    
+    await page.render(renderContext).promise;
+
+    const mimeType = targetFormat === 'png' ? 'image/png' : 'image/jpeg';
+    const quality = targetFormat === 'jpeg' ? 0.92 : undefined;
+    
+    results.push({
+      pageNum: i,
+      dataUrl: canvas.toDataURL(mimeType, quality),
+    });
+  }
+
+  return results;
+};
+
 export default function PdfToImageTool({
   user,
   onUsageRecorded,
@@ -67,7 +126,7 @@ export default function PdfToImageTool({
     }
   };
 
-  const handleConvert = () => {
+  const handleConvert = async () => {
     if (!file || !pagesCount) return;
 
     // Verify limit first
@@ -80,78 +139,26 @@ export default function PdfToImageTool({
     setIsProcessing(true);
     setError(null);
 
-    setTimeout(() => {
-      try {
-        const results: { pageNum: number; dataUrl: string }[] = [];
-        
-        // Generate high fidelity visual representation of each page on a canvas
-        for (let i = 1; i <= pagesCount; i++) {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          
-          // Width & height based on resolution
-          const ratio = resolution === '300' ? 2 : 1;
-          canvas.width = 612 * ratio;  // standard A4 ratio width
-          canvas.height = 792 * ratio; // standard height
+    try {
+      const results = await convertPdfToImages(file, targetFormat, resolution);
+      setConvertedImages(results);
 
-          if (ctx) {
-            // Draw clean page mock preview
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Record tool usage
+      const updatedUser = recordToolUsage(
+        user,
+        'pdf-to-image',
+        'PDF to Image',
+        `extracted_${file.name.replace('.pdf', '')}_images`,
+        `${pagesCount} images`
+      );
+      onUsageRecorded(updatedUser);
 
-            // subtle borders
-            ctx.strokeStyle = '#e2e8f0';
-            ctx.strokeRect(0, 0, canvas.width, canvas.height);
-
-            // top header line
-            ctx.fillStyle = '#0ea5e9';
-            ctx.fillRect(40 * ratio, 60 * ratio, 200 * ratio, 24 * ratio);
-
-            // text lines
-            ctx.fillStyle = '#475569';
-            for (let line = 0; line < 12; line++) {
-              ctx.fillRect(
-                40 * ratio,
-                (120 + line * 40) * ratio,
-                (Math.random() * 200 + 300) * ratio,
-                10 * ratio
-              );
-            }
-
-            // page indicator
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = `${12 * ratio}px font-sans`;
-            ctx.fillText(`Page ${i} of ${pagesCount}`, 40 * ratio, 740 * ratio);
-            
-            // watermark
-            ctx.fillText('PDFSwift - Local Conversion', 420 * ratio, 740 * ratio);
-          }
-
-          results.push({
-            pageNum: i,
-            dataUrl: canvas.toDataURL(`image/${targetFormat}`, 0.9),
-          });
-        }
-
-        setConvertedImages(results);
-
-        // Record tool usage
-        const updatedUser = recordToolUsage(
-          user,
-          'pdf-to-image',
-          'PDF to Image',
-          `extracted_${file.name.replace('.pdf', '')}_images`,
-          `${pagesCount} images`
-        );
-        onUsageRecorded(updatedUser);
-
-      } catch (err) {
-        console.error(err);
-        setError('Could not process conversion client side. Verify file content.');
-      } finally {
-        setIsProcessing(false);
-      }
-    }, 1500);
+    } catch (err) {
+      console.error(err);
+      setError('Could not process conversion client side. Verify file content.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (

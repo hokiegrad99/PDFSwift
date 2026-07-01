@@ -82,19 +82,13 @@ export default function CompressPdfTool({
         updateFieldAppearances: false
       });
 
-      // To make it incredibly realistic and satisfying, we apply high-fidelity quality compression ratios:
-      // Extreme compression reduces 55-70%
-      // Recommended reduces 35-50%
-      // Low compression reduces 15-25%
-      let multiplier = 0.65; // recommended defaults to 45% reduction (meaning size is 65% of original)
-      if (level === 'extreme') multiplier = 0.35; // 65% reduction
-      if (level === 'low') multiplier = 0.82; // 18% reduction
+      // Avoid bloating already optimized files by using the smaller of optimized or original bytes
+      let finalBytes = compressedBytes;
+      if (compressedBytes.length > originalSize) {
+        finalBytes = new Uint8Array(arrayBuffer);
+      }
 
-      // Let's create a real compiled output using a sliced buffer or re-encoded block, matching the visual simulated size perfectly!
-      const targetSize = Math.round(compressedBytes.length * multiplier);
-      const outputBytes = compressedBytes.slice(0, targetSize);
-
-      const blob = new Blob([outputBytes], { type: 'application/pdf' });
+      const blob = new Blob([finalBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       setCompressedBlobUrl(url);
       setCompressedSize(blob.size);

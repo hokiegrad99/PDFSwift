@@ -10,6 +10,43 @@ interface ImageConvertToolProps {
   onOpenAuth: () => void;
 }
 
+// Helper to dynamically load heic2any from CDN and convert HEIC to standard JPEG
+const convertHeic = async (file: File): Promise<Blob> => {
+  const heic2any = await new Promise<any>((resolve, reject) => {
+    if ((window as any).heic2any) {
+      resolve((window as any).heic2any);
+      return;
+    }
+    const existingScript = document.querySelector('script[src*="heic2any"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => {
+        resolve((window as any).heic2any);
+      });
+      existingScript.addEventListener('error', () => {
+        reject(new Error('Failed to load HEIC converter from CDN.'));
+      });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/heic2any/0.0.4/heic2any.min.js';
+    script.onload = () => resolve((window as any).heic2any);
+    script.onerror = () => reject(new Error('Failed to load HEIC converter from CDN. Please check your network connection.'));
+    document.head.appendChild(script);
+  });
+
+  const converted = await heic2any({
+    blob: file,
+    toType: 'image/jpeg',
+    quality: 0.8
+  });
+
+  if (Array.isArray(converted)) {
+    return converted[0];
+  }
+  return converted;
+};
+
 export default function ImageConvertTool({
   user,
   onUsageRecorded,
@@ -33,11 +70,13 @@ export default function ImageConvertTool({
     }
   };
 
-  const loadFile = (selectedFile: File) => {
+  const loadFile = async (selectedFile: File) => {
     setError(null);
     setConvertedBlobUrl(null);
 
-    const isImage = selectedFile.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(selectedFile.name);
+    const isHeic = /\.heic?f$/i.test(selectedFile.name) || selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif';
+    const isImage = isHeic || selectedFile.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(selectedFile.name);
+    
     if (!isImage) {
       setError('Invalid file type. Please select an image file.');
       return;
@@ -48,7 +87,22 @@ export default function ImageConvertTool({
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
     }
-    setPreviewUrl(URL.createObjectURL(selectedFile));
+
+    if (isHeic) {
+      setIsProcessing(true);
+      try {
+        const jpegBlob = await convertHeic(selectedFile);
+        setPreviewUrl(URL.createObjectURL(jpegBlob));
+      } catch (err: any) {
+        console.error(err);
+        setError(err.message || 'Could not parse HEIC image. The file might be corrupted.');
+        setFile(null);
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      setPreviewUrl(URL.createObjectURL(selectedFile));
+    }
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -136,7 +190,7 @@ export default function ImageConvertTool({
       <div>
         <h3 className="text-xl font-bold text-slate-900">Image Format Converter</h3>
         <p className="text-xs text-slate-500 mt-1">
-          Convert JPEGs, PNGs, WEBPs, and GIFs into other image extensions instantly.
+          Convert HEICs, JPEGs, PNGs, WEBPs, and GIFs into other image extensions instantly.
         </p>
       </div>
 
@@ -158,7 +212,7 @@ export default function ImageConvertTool({
         >
           <input
             type="file"
-            accept="image/*"
+            accept="image/*, .heic, .heif"
             ref={fileInputRef}
             onChange={handleFileChange}
             className="hidden"
@@ -169,7 +223,7 @@ export default function ImageConvertTool({
           <p className="text-sm font-semibold text-slate-800">
             Drag & drop image, or <span className="text-indigo-600 hover:text-indigo-700">browse</span>
           </p>
-          <p className="text-xs text-slate-400 mt-1">PNG, JPG, JPEG, GIF, and WEBP supported</p>
+          <p className="text-xs text-slate-400 mt-1">HEIC, HEIF, PNG, JPG, JPEG, GIF, and WEBP supported</p>
           
           <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 font-semibold mt-4 bg-slate-50 border border-slate-100 rounded-full px-3 py-1 w-fit mx-auto">
             🛡️ Strict privacy guard keeps files local
