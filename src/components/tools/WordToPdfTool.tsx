@@ -28,19 +28,55 @@ export default function WordToPdfTool({
 
   const usageLimit = checkUsageLimit(user);
 
+  const loadMammoth = (): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      if ((window as any).mammoth) {
+        resolve((window as any).mammoth);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js';
+      script.onload = () => resolve((window as any).mammoth);
+      script.onerror = () => reject(new Error('Failed to load Word document reader library.'));
+      document.head.appendChild(script);
+    });
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       setFileName(selectedFile.name);
       setPdfBlobUrl(null);
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target && typeof event.target.result === 'string') {
-          setInputText(event.target.result);
-        }
-      };
-      reader.readAsText(selectedFile);
+      const isDocx = selectedFile.name.toLowerCase().endsWith('.docx');
+
+      if (isDocx) {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          if (event.target && event.target.result instanceof ArrayBuffer) {
+            try {
+              setIsProcessing(true);
+              setError(null);
+              const mammothLib = await loadMammoth();
+              const result = await mammothLib.extractRawText({ arrayBuffer: event.target.result });
+              setInputText(result.value);
+            } catch (err: any) {
+              setError(err.message || 'Error parsing .docx file. Ensure it is not corrupted.');
+            } finally {
+              setIsProcessing(false);
+            }
+          }
+        };
+        reader.readAsArrayBuffer(selectedFile);
+      } else {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target && typeof event.target.result === 'string') {
+            setInputText(event.target.result);
+          }
+        };
+        reader.readAsText(selectedFile);
+      }
     }
   };
 
@@ -185,13 +221,13 @@ export default function WordToPdfTool({
             
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 font-sans"
             >
-              Upload Text File
+              Upload Word (.docx) or Text File
             </button>
             <input
               type="file"
-              accept=".txt"
+              accept=".docx,.txt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
               ref={fileInputRef}
               onChange={handleFileUpload}
               className="hidden"

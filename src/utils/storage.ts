@@ -1,4 +1,53 @@
 import { User, UsageLog, PaymentHistory, ToolId, SubscriptionTier, LimitCheckResult } from '../types';
+import { db, auth } from './firebase';
+import { collection, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid || null,
+      email: auth.currentUser?.email || null,
+      emailVerified: auth.currentUser?.emailVerified || null,
+      isAnonymous: auth.currentUser?.isAnonymous || null,
+      tenantId: auth.currentUser?.tenantId || null,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 const STORAGE_KEYS = {
   CURRENT_USER: 'pdf_tools_current_user',
@@ -74,6 +123,77 @@ export const initializeStorage = () => {
   }
 };
 
+export const syncAllUsersFromFirestore = async (): Promise<User[]> => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'users'));
+    const users: User[] = [];
+    querySnapshot.forEach((doc) => {
+      users.push(doc.data() as User);
+    });
+    
+    if (users.length === 0) {
+      // Seed pre-seeded users in Firestore
+      for (const u of PRE_SEEDED_USERS) {
+        try {
+          await setDoc(doc(db, 'users', u.id), u);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.WRITE, `users/${u.id}`);
+        }
+        users.push(u);
+      }
+    }
+    
+    localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
+    return users;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('operationType')) {
+      throw error;
+    }
+    handleFirestoreError(error, OperationType.GET, 'users');
+    return getAllUsers();
+  }
+};
+
+export const syncUsageLogsFromFirestore = async (): Promise<UsageLog[]> => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'usage_logs'));
+    const logs: UsageLog[] = [];
+    querySnapshot.forEach((doc) => {
+      logs.push(doc.data() as UsageLog);
+    });
+    logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    localStorage.setItem(STORAGE_KEYS.USAGE_LOGS, JSON.stringify(logs));
+    return logs;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'usage_logs');
+    return getUsageLogs();
+  }
+};
+
+export const syncPaymentsFromFirestore = async (): Promise<PaymentHistory[]> => {
+  try {
+    const querySnapshot = await getDocs(collection(db, 'payments'));
+    const payments: PaymentHistory[] = [];
+    querySnapshot.forEach((doc) => {
+      payments.push(doc.data() as PaymentHistory);
+    });
+    payments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+    return payments;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'payments');
+    return getPayments();
+  }
+};
+
+export const deleteUserFromFirestore = async (userId: string): Promise<void> => {
+  try {
+    await deleteDoc(doc(db, 'users', userId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+  }
+};
+
 export const getAllUsers = (): User[] => {
   initializeStorage();
   const usersStr = localStorage.getItem(STORAGE_KEYS.ALL_USERS);
@@ -82,6 +202,12 @@ export const getAllUsers = (): User[] => {
 
 export const saveAllUsers = (users: User[]) => {
   localStorage.setItem(STORAGE_KEYS.ALL_USERS, JSON.stringify(users));
+  // Write all to Firestore in background
+  for (const u of users) {
+    setDoc(doc(db, 'users', u.id), u).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, `users/${u.id}`);
+    });
+  }
 };
 
 export const getCurrentUser = (): User | null => {
@@ -103,6 +229,10 @@ export const getCurrentUser = (): User | null => {
 export const saveCurrentUser = (user: User | null) => {
   if (user) {
     localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+    // Write updated current user state to Firestore as well
+    setDoc(doc(db, 'users', user.id), user).catch((err) => {
+      handleFirestoreError(err, OperationType.WRITE, `users/${user.id}`);
+    });
   } else {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
   }
@@ -114,6 +244,10 @@ export const updateUserInList = (user: User) => {
   if (index !== -1) {
     users[index] = user;
     saveAllUsers(users);
+  } else {
+    // If user is not in the local list, add them to it
+    const updated = [...users, user];
+    saveAllUsers(updated);
   }
 };
 
@@ -132,6 +266,11 @@ export const addUsageLog = (log: Omit<UsageLog, 'id' | 'timestamp'>) => {
   };
   logs.unshift(newLog);
   localStorage.setItem(STORAGE_KEYS.USAGE_LOGS, JSON.stringify(logs));
+  
+  // Write to Firestore in background
+  setDoc(doc(db, 'usage_logs', newLog.id), newLog).catch((err) => {
+    handleFirestoreError(err, OperationType.WRITE, `usage_logs/${newLog.id}`);
+  });
 };
 
 export const getPayments = (): PaymentHistory[] => {
@@ -149,6 +288,11 @@ export const addPayment = (payment: Omit<PaymentHistory, 'id' | 'date'>) => {
   };
   payments.unshift(newPayment);
   localStorage.setItem(STORAGE_KEYS.PAYMENTS, JSON.stringify(payments));
+
+  // Write to Firestore in background
+  setDoc(doc(db, 'payments', newPayment.id), newPayment).catch((err) => {
+    handleFirestoreError(err, OperationType.WRITE, `payments/${newPayment.id}`);
+  });
 };
 
 // Check if user has available limits

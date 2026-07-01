@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, ToolId, ToolDefinition, LimitCheckResult } from './types';
-import { getCurrentUser, checkUsageLimit, initializeStorage, saveCurrentUser, updateUserInList } from './utils/storage';
+import { getCurrentUser, checkUsageLimit, initializeStorage, saveCurrentUser, updateUserInList, syncAllUsersFromFirestore, syncUsageLogsFromFirestore, syncPaymentsFromFirestore } from './utils/storage';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import AuthModal from './components/AuthModal';
@@ -34,6 +34,37 @@ export default function App() {
   useEffect(() => {
     initializeStorage();
     setCurrentUser(getCurrentUser());
+    
+    // Background Firestore sync to load any cross-browser accounts/logs/payments
+    const backgroundSync = async () => {
+      try {
+        const users = await syncAllUsersFromFirestore();
+        await syncUsageLogsFromFirestore();
+        await syncPaymentsFromFirestore();
+        
+        // Refresh local current user if they are logged in and their data changed on another browser
+        const loggedInUser = getCurrentUser();
+        if (loggedInUser) {
+          const freshUser = users.find(u => u.id === loggedInUser.id);
+          if (freshUser) {
+            if (
+              freshUser.name !== loggedInUser.name ||
+              freshUser.subscriptionTier !== loggedInUser.subscriptionTier ||
+              freshUser.dailyUsageCount !== loggedInUser.dailyUsageCount ||
+              freshUser.password !== loggedInUser.password ||
+              freshUser.role !== loggedInUser.role
+            ) {
+              setCurrentUser(freshUser);
+              // Save to localStorage without writing back to Firestore immediately to avoid loops
+              localStorage.setItem('pdf_tools_current_user', JSON.stringify(freshUser));
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Initial Firestore sync failed:', e);
+      }
+    };
+    backgroundSync();
     
     // Auto trigger onboarding for first-time visitors
     const onboardingDone = localStorage.getItem('pdfswift_onboarding_completed');

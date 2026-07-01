@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, UsageLog, PaymentHistory, SubscriptionTier } from '../types';
-import { getAllUsers, saveAllUsers, getUsageLogs, getPayments, addPayment } from '../utils/storage';
+import { getAllUsers, saveAllUsers, getUsageLogs, getPayments, addPayment, deleteUserFromFirestore, syncAllUsersFromFirestore, syncUsageLogsFromFirestore, syncPaymentsFromFirestore } from '../utils/storage';
 import { Shield, Users, BarChart2, DollarSign, FileText, Check, Award, RefreshCw, AlertCircle, Plus } from 'lucide-react';
 
 interface AdminPanelProps {
@@ -13,6 +13,22 @@ export default function AdminPanel({ user, onRefreshUserData }: AdminPanelProps)
   const [logs, setLogs] = useState<UsageLog[]>(getUsageLogs());
   const [payments, setPayments] = useState<PaymentHistory[]>(getPayments());
   const [activeTab, setActiveTab] = useState<'users' | 'analytics' | 'billing'>('users');
+
+  useEffect(() => {
+    const fetchLatest = async () => {
+      try {
+        const syncedUsers = await syncAllUsersFromFirestore();
+        const syncedLogs = await syncUsageLogsFromFirestore();
+        const syncedPayments = await syncPaymentsFromFirestore();
+        setUsers(syncedUsers);
+        setLogs(syncedLogs);
+        setPayments(syncedPayments);
+      } catch (e) {
+        console.error('Error in AdminPanel sync:', e);
+      }
+    };
+    fetchLatest();
+  }, []);
 
   // Quick state overrides for simulated fields
   const [newPayEmail, setNewPayEmail] = useState('');
@@ -95,7 +111,7 @@ export default function AdminPanel({ user, onRefreshUserData }: AdminPanelProps)
     refreshData();
   };
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     if (userId === user.id) {
       alert("You cannot delete your own logged-in admin account!");
       return;
@@ -104,15 +120,20 @@ export default function AdminPanel({ user, onRefreshUserData }: AdminPanelProps)
       const allUsers = getAllUsers();
       const updated = allUsers.filter(u => u.id !== userId);
       saveAllUsers(updated);
+      await deleteUserFromFirestore(userId);
       refreshData();
     }
   };
 
-  const handlePurgeTestUsers = () => {
+  const handlePurgeTestUsers = async () => {
     if (window.confirm("Are you sure you want to delete all pre-loaded test users? (This will remove all non-admin accounts)")) {
       const allUsers = getAllUsers();
+      const toDelete = allUsers.filter(u => u.role !== 'admin' && u.id !== user.id);
       const remaining = allUsers.filter(u => u.role === 'admin' || u.id === user.id);
       saveAllUsers(remaining);
+      for (const u of toDelete) {
+        await deleteUserFromFirestore(u.id);
+      }
       refreshData();
     }
   };

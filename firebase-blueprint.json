@@ -1,0 +1,70 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with role, subscription tier, and daily usage count",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "name": { "type": "string" },
+        "password": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "subscriptionTier": { "type": "string", "enum": ["free", "pro", "team"] },
+        "premiumUntil": { "type": "string" },
+        "dailyUsageCount": { "type": "integer" },
+        "lastUsageResetDate": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "name", "role", "subscriptionTier", "dailyUsageCount", "lastUsageResetDate", "createdAt"]
+    },
+    "UsageLog": {
+      "title": "UsageLog",
+      "description": "Records representing SaaS tool usage by a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "toolId": { "type": "string" },
+        "toolName": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileSize": { "type": "string" }
+      },
+      "required": ["id", "userId", "userEmail", "toolId", "toolName", "timestamp"]
+    },
+    "PaymentHistory": {
+      "title": "PaymentHistory",
+      "description": "Invoice and billing transactional records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "planName": { "type": "string" },
+        "amount": { "type": "integer" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["completed", "refunded"] },
+        "transactionId": { "type": "string" },
+        "cardBrand": { "type": "string" },
+        "last4": { "type": "string" }
+      },
+      "required": ["id", "userId", "userEmail", "planName", "amount", "date", "status", "transactionId", "cardBrand", "last4"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "User profiles and subscription stats"
+    },
+    "usage_logs": {
+      "schema": "UsageLog",
+      "description": "SaaS operations and usage records"
+    },
+    "payments": {
+      "schema": "PaymentHistory",
+      "description": "Billing audit ledger"
+    }
+  }
+}
