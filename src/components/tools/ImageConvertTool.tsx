@@ -74,7 +74,7 @@ export default function ImageConvertTool({
     setError(null);
     setConvertedBlobUrl(null);
 
-    const isHeic = /\.heic?f$/i.test(selectedFile.name) || selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif';
+    const isHeic = /\.(heic|heif)$/i.test(selectedFile.name) || selectedFile.type === 'image/heic' || selectedFile.type === 'image/heif';
     const isImage = isHeic || selectedFile.type.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(selectedFile.name);
     
     if (!isImage) {
