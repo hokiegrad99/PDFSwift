@@ -4,6 +4,7 @@ export interface User {
   id: string;
   email: string;
   name: string;
+  password?: string;
   role: 'user' | 'admin';
   subscriptionTier: SubscriptionTier;
   premiumUntil: string | null; // ISO timestamp or null if unlimited/active forever

@@ -296,6 +296,7 @@ export default function App() {
               <UserDashboard
                 user={currentUser}
                 onOpenPricing={() => setIsPricingOpen(true)}
+                onUpdateUser={setCurrentUser}
               />
             )}
 

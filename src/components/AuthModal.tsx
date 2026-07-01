@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
-import { getAllUsers, saveCurrentUser, saveAllUsers, getCurrentUser } from '../utils/storage';
-import { Mail, Lock, User as UserIcon, X, AlertCircle, Sparkles, Check } from 'lucide-react';
+import { getAllUsers, saveCurrentUser, saveAllUsers, getCurrentUser, updateUserInList } from '../utils/storage';
+import { Mail, Lock, User as UserIcon, X, AlertCircle, Sparkles, Check, Key } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -10,12 +10,16 @@ interface AuthModalProps {
 }
 
 export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModalProps) {
-  const [isLogin, setIsLogin] = useState(true);
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const isLogin = authMode === 'login';
+  const isRegister = authMode === 'register';
+  const isForgot = authMode === 'forgot';
 
   if (!isOpen) return null;
 
@@ -38,7 +42,28 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
     setError('');
     setSuccess('');
 
-    if (!email || !password || (!isLogin && !name)) {
+    if (isForgot) {
+      if (!email || !password) {
+        setError('Please enter your email and a new password.');
+        return;
+      }
+      const users = getAllUsers();
+      const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (foundUser) {
+        foundUser.password = password;
+        updateUserInList(foundUser);
+        setSuccess('Password reset successful! You can now sign in.');
+        setTimeout(() => {
+          setSuccess('');
+          setAuthMode('login');
+        }, 1500);
+      } else {
+        setError('No registered account found with this email address.');
+      }
+      return;
+    }
+
+    if (!email || !password || (isRegister && !name)) {
       setError('Please fill in all fields.');
       return;
     }
@@ -54,6 +79,10 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
       // Handle login
       const foundUser = users.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (foundUser) {
+        if (foundUser.password && foundUser.password !== password) {
+          setError('Invalid password. Please try again.');
+          return;
+        }
         saveCurrentUser(foundUser);
         onLoginSuccess(foundUser);
         setSuccess(`Welcome back, ${foundUser.name}!`);
@@ -67,6 +96,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
           id: `user-${Date.now()}`,
           email: email.toLowerCase(),
           name: email.split('@')[0],
+          password: password,
           role: 'user',
           subscriptionTier: 'free',
           premiumUntil: null,
@@ -96,6 +126,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         id: `user-${Date.now()}`,
         email: email.toLowerCase(),
         name,
+        password,
         role: 'user',
         subscriptionTier: 'free',
         premiumUntil: null,
@@ -122,7 +153,7 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         {/* Header */}
         <div className="flex items-center justify-between mb-5">
           <h3 className="text-xl font-bold tracking-tight text-slate-900">
-            {isLogin ? 'Sign In' : 'Create Account'}
+            {isForgot ? 'Reset Password' : isLogin ? 'Sign In' : 'Create Account'}
           </h3>
           <button
             onClick={onClose}
@@ -149,33 +180,35 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
         )}
 
         {/* Demo Fast-login shortcuts */}
-        <div className="mb-5 bg-slate-50 border border-slate-200/60 rounded-xl p-3">
-          <span className="block text-xs font-semibold text-slate-500 mb-2 font-mono">
-            TEST ACCESS SHORTCUTS:
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => handleDemoLogin('user@pdftools.com')}
-              className="flex-1 rounded-lg bg-white border border-slate-200 py-1.5 px-2.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition hover:border-slate-300"
-              id="quick-login-free"
-            >
-              👤 Log In (Free Tier)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDemoLogin('premium@pdftools.com')}
-              className="flex-1 rounded-lg bg-white border border-slate-200 py-1.5 px-2.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition hover:border-slate-300"
-              id="quick-login-premium"
-            >
-              ⭐ Log In (Pro Tier)
-            </button>
+        {!isForgot && (
+          <div className="mb-5 bg-slate-50 border border-slate-200/60 rounded-xl p-3">
+            <span className="block text-xs font-semibold text-slate-500 mb-2 font-mono">
+              TEST ACCESS SHORTCUTS:
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('user@pdftools.com')}
+                className="flex-1 rounded-lg bg-white border border-slate-200 py-1.5 px-2.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition hover:border-slate-300"
+                id="quick-login-free"
+              >
+                👤 Log In (Free Tier)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('premium@pdftools.com')}
+                className="flex-1 rounded-lg bg-white border border-slate-200 py-1.5 px-2.5 text-xs font-medium text-slate-700 shadow-xs hover:bg-slate-50 transition hover:border-slate-300"
+                id="quick-login-premium"
+              >
+                ⭐ Log In (Pro Tier)
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Main form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {!isLogin && (
+          {isRegister && (
             <div>
               <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
                 Full Name
@@ -216,9 +249,25 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
-              Password
-            </label>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                {isForgot ? 'Choose New Password' : 'Password'}
+              </label>
+              {isLogin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setSuccess('');
+                    setAuthMode('forgot');
+                  }}
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700"
+                  id="forgot-password-link"
+                >
+                  Forgot Password?
+                </button>
+              )}
+            </div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                 <Lock className="h-4 w-4" />
@@ -239,18 +288,39 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
             className="w-full rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2 mt-2"
             id="auth-submit-btn"
           >
-            {isLogin ? 'Sign In' : 'Create Account'}
+            {isForgot ? 'Reset Password' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
         </form>
 
         {/* Toggle link */}
         <div className="text-center mt-5 text-xs text-slate-500">
-          {isLogin ? (
+          {isForgot ? (
+            <span>
+              Remembered your password?{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setError('');
+                  setSuccess('');
+                  setAuthMode('login');
+                }}
+                className="font-bold text-indigo-600 hover:text-indigo-700"
+                id="forgot-back-to-login"
+              >
+                Sign In instead
+              </button>
+            </span>
+          ) : isLogin ? (
             <span>
               Don't have an account yet?{' '}
               <button
-                onClick={() => setIsLogin(false)}
-                className="font-semibold text-sky-600 hover:text-sky-700"
+                type="button"
+                onClick={() => {
+                  setError('');
+                  setSuccess('');
+                  setAuthMode('register');
+                }}
+                className="font-bold text-indigo-600 hover:text-indigo-700"
                 id="toggle-register-btn"
               >
                 Sign Up for free
@@ -260,8 +330,13 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }: AuthModal
             <span>
               Already have an account?{' '}
               <button
-                onClick={() => setIsLogin(true)}
-                className="font-semibold text-sky-600 hover:text-sky-700"
+                type="button"
+                onClick={() => {
+                  setError('');
+                  setSuccess('');
+                  setAuthMode('login');
+                }}
+                className="font-bold text-indigo-600 hover:text-indigo-700"
                 id="toggle-login-btn"
               >
                 Sign In instead

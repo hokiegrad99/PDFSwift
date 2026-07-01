@@ -1,15 +1,59 @@
 import React, { useState } from 'react';
 import { User, UsageLog, PaymentHistory } from '../types';
-import { getUsageLogs, getPayments } from '../utils/storage';
+import { getUsageLogs, getPayments, updateUserInList, saveCurrentUser } from '../utils/storage';
 import { BarChart, Calendar, CreditCard, Clock, FileText, CheckCircle, RefreshCw, Award, ArrowUpRight } from 'lucide-react';
 
 interface UserDashboardProps {
   user: User;
   onOpenPricing: () => void;
+  onUpdateUser?: (user: User) => void;
 }
 
-export default function UserDashboard({ user, onOpenPricing }: UserDashboardProps) {
+export default function UserDashboard({ user, onOpenPricing, onUpdateUser }: UserDashboardProps) {
   const [activeReceipt, setActiveReceipt] = useState<PaymentHistory | null>(null);
+  const [profileName, setProfileName] = useState(user.name);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [settingsSuccess, setSettingsSuccess] = useState('');
+  const [settingsError, setSettingsError] = useState('');
+
+  React.useEffect(() => {
+    setProfileName(user.name);
+  }, [user.name]);
+
+  const handleUpdateProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsError('');
+    setSettingsSuccess('');
+
+    if (!profileName.trim()) {
+      setSettingsError('Display name cannot be empty.');
+      return;
+    }
+
+    if (newPassword && newPassword !== confirmPassword) {
+      setSettingsError('New passwords do not match.');
+      return;
+    }
+
+    const updatedUser: User = {
+      ...user,
+      name: profileName,
+    };
+    if (newPassword) {
+      updatedUser.password = newPassword;
+    }
+
+    updateUserInList(updatedUser);
+    saveCurrentUser(updatedUser);
+    if (onUpdateUser) {
+      onUpdateUser(updatedUser);
+    }
+    setSettingsSuccess('Profile updated successfully!');
+    setNewPassword('');
+    setConfirmPassword('');
+    setTimeout(() => setSettingsSuccess(''), 3000);
+  };
 
   const logs = getUsageLogs().filter(log => log.userId === user.id);
   const payments = getPayments().filter(pay => pay.userId === user.id);
@@ -158,6 +202,75 @@ export default function UserDashboard({ user, onOpenPricing }: UserDashboardProp
                 ))}
               </div>
             )}
+          </div>
+
+          {/* Account Profile Settings Card */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-xs text-left" id="dash-profile-settings">
+            <h4 className="font-bold text-slate-900 text-sm mb-1">Account Profile</h4>
+            <p className="text-xs text-slate-400 mb-4">Update your public display name or set a new password.</p>
+
+            {settingsError && (
+              <div className="p-2.5 mb-3 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-xl" id="profile-settings-error">
+                {settingsError}
+              </div>
+            )}
+            {settingsSuccess && (
+              <div className="p-2.5 mb-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl" id="profile-settings-success">
+                {settingsSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProfile} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 font-mono">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
+                  placeholder="Your Display Name"
+                  id="profile-name-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 font-mono">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
+                  placeholder="••••••••"
+                  id="profile-password-input"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 font-mono">
+                  Confirm Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 focus:border-indigo-500 focus:outline-none"
+                  placeholder="••••••••"
+                  id="profile-password-confirm"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs py-2.5 transition"
+                id="profile-update-btn"
+              >
+                Save Profile Changes
+              </button>
+            </form>
           </div>
         </div>
 
