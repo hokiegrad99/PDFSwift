@@ -95,6 +95,28 @@ export default function AdminPanel({ user, onRefreshUserData }: AdminPanelProps)
     refreshData();
   };
 
+  const handleDeleteUser = (userId: string) => {
+    if (userId === user.id) {
+      alert("You cannot delete your own logged-in admin account!");
+      return;
+    }
+    if (window.confirm("Are you sure you want to delete this user account?")) {
+      const allUsers = getAllUsers();
+      const updated = allUsers.filter(u => u.id !== userId);
+      saveAllUsers(updated);
+      refreshData();
+    }
+  };
+
+  const handlePurgeTestUsers = () => {
+    if (window.confirm("Are you sure you want to delete all pre-loaded test users? (This will remove all non-admin accounts)")) {
+      const allUsers = getAllUsers();
+      const remaining = allUsers.filter(u => u.role === 'admin' || u.id === user.id);
+      saveAllUsers(remaining);
+      refreshData();
+    }
+  };
+
   const handleCreateSimulatedPayment = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPayEmail) {
@@ -144,15 +166,27 @@ export default function AdminPanel({ user, onRefreshUserData }: AdminPanelProps)
           </p>
         </div>
         
-        {/* Reset Counters Action */}
-        <button
-          onClick={handleResetAllCounters}
-          className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition"
-          id="admin-reset-all-btn"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Reset All Counters
-        </button>
+        <div className="flex gap-2">
+          {/* Reset Counters Action */}
+          <button
+            onClick={handleResetAllCounters}
+            className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-slate-800 transition"
+            id="admin-reset-all-btn"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Reset All Counters
+          </button>
+
+          {/* Purge Test Users Action */}
+          <button
+            onClick={handlePurgeTestUsers}
+            className="flex items-center gap-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-semibold text-white shadow-xs transition"
+            id="admin-purge-test-users-btn"
+          >
+            <Users className="h-3.5 w-3.5" />
+            Purge Test Users
+          </button>
+        </div>
       </div>
 
       {/* Administrative Metrics Row */}
@@ -329,6 +363,15 @@ export default function AdminPanel({ user, onRefreshUserData }: AdminPanelProps)
                         >
                           Grant Team
                         </button>
+                        {u.id !== user.id && (
+                          <button
+                            onClick={() => handleDeleteUser(u.id)}
+                            className="rounded-lg bg-rose-50 text-rose-700 border border-rose-100 hover:bg-rose-100 px-2.5 py-1 font-semibold text-[10px] transition"
+                            title="Permanently delete user account"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { getAllUsers, saveCurrentUser, saveAllUsers, getCurrentUser } from '../utils/storage';
-import { Shield, Mail, Lock, X, AlertCircle, Check, Key, Clipboard, ClipboardCheck } from 'lucide-react';
+import { Shield, Mail, Lock, X, AlertCircle, Check, Key } from 'lucide-react';
 
 interface AdminLoginModalProps {
   isOpen: boolean;
@@ -14,24 +14,11 @@ export default function AdminLoginModal({ isOpen, onClose, onLoginSuccess }: Adm
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [copiedEmail, setCopiedEmail] = useState(false);
-  const [copiedPass, setCopiedPass] = useState(false);
 
   const adminEmailCred = 'admin@pdftools.com';
   const adminPassCred = 'admin-pass-2026';
 
   if (!isOpen) return null;
-
-  const handleCopy = (text: string, type: 'email' | 'pass') => {
-    navigator.clipboard.writeText(text);
-    if (type === 'email') {
-      setCopiedEmail(true);
-      setTimeout(() => setCopiedEmail(false), 2000);
-    } else {
-      setCopiedPass(true);
-      setTimeout(() => setCopiedPass(false), 2000);
-    }
-  };
 
   const handleAdminAuthenticate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,48 +114,7 @@ export default function AdminLoginModal({ isOpen, onClose, onLoginSuccess }: Adm
           </div>
         )}
 
-        {/* Credentials Display Panel */}
-        <div className="mb-6 bg-slate-950/80 border border-slate-800 rounded-2xl p-4.5 space-y-3.5 text-xs">
-          <span className="block text-[10px] uppercase font-extrabold tracking-wider text-rose-500 font-mono">
-            SECURE ACCESS CREDENTIALS:
-          </span>
-          
-          <div className="space-y-2">
-            {/* Email credential block */}
-            <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800/80 rounded-xl px-3 py-2">
-              <div>
-                <span className="block text-[10px] text-slate-500 font-medium">ADMIN EMAIL</span>
-                <span className="font-mono text-slate-200 font-semibold">{adminEmailCred}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCopy(adminEmailCred, 'email')}
-                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition"
-                title="Copy Email"
-                id="copy-admin-email"
-              >
-                {copiedEmail ? <ClipboardCheck className="h-4 w-4 text-emerald-500" /> : <Clipboard className="h-4 w-4" />}
-              </button>
-            </div>
 
-            {/* Password credential block */}
-            <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800/80 rounded-xl px-3 py-2">
-              <div>
-                <span className="block text-[10px] text-slate-500 font-medium">SECURITY KEY / PASSWORD</span>
-                <span className="font-mono text-slate-200 font-semibold">{adminPassCred}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCopy(adminPassCred, 'pass')}
-                className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition"
-                title="Copy Security Key"
-                id="copy-admin-pass"
-              >
-                {copiedPass ? <ClipboardCheck className="h-4 w-4 text-emerald-500" /> : <Clipboard className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-        </div>
 
         {/* Authentication Form */}
         <form onSubmit={handleAdminAuthenticate} className="space-y-4">
